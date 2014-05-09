@@ -3,8 +3,6 @@ package com.dhwebco.jScheme;
 import com.dhwebco.jScheme.ast.AstNode;
 import com.dhwebco.jScheme.ast.nodes.*;
 
-import java.util.ArrayList;
-
 /*
     http://www.scheme.com/tspl2d/grammar.html
     This is not complete yet. Implementing a piece at a time. The number system in particular I am implementing
