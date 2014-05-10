@@ -21,18 +21,29 @@ public class Tokenizer {
             if (!isWhitespace(c)) {
                 if (c == '"') { // string
                     StringBuilder token = new StringBuilder();
-                    token.append(c);
+                    token.append(c); i++;
 
-                    while (i + 1 < input.length() && isValidStringChar(input.charAt(i + 1), input.charAt(i))) {
-                        i++;
-                        token.append(input.charAt(i));
+                    while (i < input.length() && input.charAt(i) != '"') {
+                        if (input.charAt(i) == '\\') {
+                            if (i + 1 < input.length() && input.charAt(i + 1) == '"') {
+                                token.append("\"");
+                                i += 2;
+                            } else if (i + 1 < input.length() && input.charAt(i + 1) == '\\') {
+                                token.append("\\");
+                                i += 2;
+                            } else {
+                                throw new Exception("Invalid escape sequence in string");
+                            }
+                        } else {
+                            token.append(input.charAt(i));
+                            i++;
+                        }
                     }
 
-                    if (input.charAt(i + 1) != '"') {
+                    if (i >= input.length() || input.charAt(i) != '"') {
                         throw new Exception("No closing quote for string " + token.toString());
                     } else {
                         token.append('"');
-                        i++; // eat closing quote
                     }
 
                     tokens.add(token.toString());
@@ -55,13 +66,23 @@ public class Tokenizer {
     }
 
     private boolean isValidStringChar(char c, char prevChar) {
-        if (c == '"' && prevChar != '\\') {
+        if (c == '"' && !isEscapedStringChar(c, prevChar)) {
             return false;
-        } else if (c == '\\' && prevChar != '\\') {
+        } else if (c == '\\' && !isEscapedStringChar(c, prevChar)) {
             return false;
         }
 
         return true;
+    }
+
+    private boolean isEscapedStringChar(char c, char prevChar) {
+        if (c == '"' && prevChar == '\\') {
+            return true;
+        } else if (c == '\\' && prevChar == '\\') {
+            return true;
+        }
+
+        return false;
     }
 
     private boolean isValidAtomChar(char c) {
@@ -107,7 +128,7 @@ public class Tokenizer {
         try {
             return tokens.get(pos++);
         } catch (IndexOutOfBoundsException e) {
-            return "";
+            return null;
         }
     }
 

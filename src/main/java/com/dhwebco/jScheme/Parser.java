@@ -8,7 +8,10 @@ import com.dhwebco.jScheme.ast.nodes.*;
     This is not complete yet. Implementing a piece at a time. The number system in particular I am implementing
     in a drastically simpler fashion to being with.
 
-    <expression>    ::= <constant> | (quote <datum>) | ' <datum> | (lambda <formals> <body>)
+    <form>          ::= <definition> | <expression>
+    <definition>    ::= <variable definition>
+    <variable definition> ::= (define <variable> <expression>)
+    <expression>    ::= <constant> | (quote <datum>) | ' <datum> | (lambda <formals> <body>) | <application>
     <constant>      ::= <boolean> | <number> | <character> | <string>
     <boolean>       ::= #t | #f
     <number>        ::= <num 10>
@@ -33,6 +36,7 @@ import com.dhwebco.jScheme.ast.nodes.*;
     <formals>		::= <variable> | (<variable>*)
     <variable>      ::= <identifier>
     <body>		    ::= <definition>*(TODO) <expression>+
+    <application>   ::= (<expression> <expression>*)
  */
 public class Parser {
     private AstNode astRoot;
@@ -41,55 +45,152 @@ public class Parser {
     public Parser(String input) throws Exception {
         this.tokenizer = new Tokenizer(input);
         this.tokenizer.tokenize();
+        this.parse();
     }
 
-    private void expression(AstNode parent) throws Exception {
-        AstNode expr = new ExpressionNode();
-        parent.addChild(expr);
+    private boolean form(AstNode parent) throws Exception {
+        FormNode node = new FormNode();
+        boolean definition = definition(node);
+        boolean expression = expression(node);
 
-        constant(expr);
-        quote(expr);
-        lambda(expr);
+        if (definition || expression) {
+            parent.addChild(node);
+            return true;
+        }
+        return false;
     }
 
-    private void constant(AstNode parent) throws Exception {
-        _boolean(parent);
-        number(parent);
-        character(parent);
-        string(parent);
+    private boolean definition(AstNode parent) throws Exception {
+        boolean variableDefinition = variableDefinition(parent);
+
+        return variableDefinition;
     }
 
-    private void quote(AstNode parent) throws Exception {
+    private boolean variableDefinition(AstNode parent) throws Exception {
+        if (tokenizer.peek().equals("(") && tokenizer.peek(1).equals("define")) {
+            tokenizer.discardNextToken(2);
+
+            AstNode node = new DefinitionNode();
+            boolean variable = variable(node);
+            if (!variable) {
+                throw new Exception("Invalid variable name for definition");
+            }
+
+            boolean expression = expression(node);
+            if (!expression) {
+                throw new Exception("Invalid expression for definition");
+            }
+
+            if (!tokenizer.peek().equals(")")) {
+                throw new Exception("Missing closing parenthesis for definition");
+            } else {
+                tokenizer.discardNextToken();
+                parent.addChild(node);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private boolean expression(AstNode parent) throws Exception {
+        AstNode expressionNode = new ExpressionNode();
+
+        if (constant(expressionNode) || variable(expressionNode) || quote(expressionNode) || lambda(expressionNode) || application(parent)) {
+            if (expressionNode.hasChildren()) { // not application, leads to too many nested expressions
+                parent.addChild(expressionNode);
+            }
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    private boolean constant(AstNode parent) throws Exception {
+        boolean _boolean = _boolean(parent);
+        boolean number = number(parent);
+        boolean character = character(parent);
+        boolean string = string(parent);
+
+        return _boolean || number || character || string;
+    }
+
+    private boolean quote(AstNode parent) throws Exception {
         if (tokenizer.peek().equals("(") && tokenizer.peek(1).equals("quote")) {
             tokenizer.discardNextToken(2);
             AstNode node = new QuoteNode();
             parent.addChild(node);
             datum(node);
+            if (tokenizer.peek().equals(")")) {
+                tokenizer.discardNextToken();
+            } else {
+                throw new Exception("Unexpected end of quote form");
+            }
+            return true;
         } else if (tokenizer.peek().equals("'")) {
             tokenizer.discardNextToken();
             AstNode node = new QuoteNode();
             parent.addChild(node);
             datum(node);
+            return true;
         }
+        return false;
     }
 
-    private void lambda(AstNode parent) throws Exception {
+    private boolean lambda(AstNode parent) throws Exception {
         if (tokenizer.peek().equals("(") && tokenizer.peek(1).equals("lambda")) {
             tokenizer.discardNextToken(2);
             AstNode node = new LambdaNode();
             formals(node);
             body(node);
-            parent.addChild(node);
+
+            if (tokenizer.peek().equals(")")) {
+                tokenizer.discardNextToken();
+                parent.addChild(node);
+                return true;
+            } else {
+                throw new Exception("Missing closing parenthesis for lambda");
+            }
+        }
+        return false;
+    }
+
+    private boolean formals(AstNode parent) throws Exception {
+        if (tokenizer.peek().equals("(")) {
+            tokenizer.discardNextToken();
+            AstNode node = new ExpressionNode();
+
+            while (!tokenizer.endOfTokenStream() && !tokenizer.peek().equals(")") && variable(node)) {
+                int i = 9;
+            }
+
+            if (!tokenizer.peek().equals(")")) {
+                throw new Exception("Unexpected end of lambda parameter list");
+            } else {
+                tokenizer.discardNextToken();
+                parent.addChild(node);
+                return true;
+            }
+        } else {
+            return variable(parent);
         }
     }
 
-    private void formals(AstNode parent) throws Exception {
+    private boolean body(AstNode parent) throws Exception {
+        return expression(parent);
+    }
+
+    private boolean application(AstNode parent) throws Exception {
         if (tokenizer.peek().equals("(")) {
             tokenizer.discardNextToken();
-            AstNode node = new ListNode();
+            AstNode node = new ExpressionNode();
+            // there must be at least one expression
+            if (!expression(node)) {
+                return false;
+            }
 
-            while (!tokenizer.endOfTokenStream() && !tokenizer.peek().equals(")")) {
-                variable(node);
+            while (!tokenizer.endOfTokenStream() && !tokenizer.peek().equals(")") && expression(node)) {
+                int i = 0;
             }
 
             if (!tokenizer.peek().equals(")")) {
@@ -97,35 +198,32 @@ public class Parser {
             } else {
                 tokenizer.discardNextToken();
                 parent.addChild(node);
+                return true;
             }
-        } else {
-            variable(parent);
         }
+        return false;
     }
 
-    private void body(AstNode parent) throws Exception {
-        expression(parent);
+    private boolean datum(AstNode parent) throws Exception {
+        boolean _boolean = _boolean(parent);
+        boolean number = number(parent);
+        boolean character = character(parent);
+        boolean string = string(parent);
+        boolean symbol = symbol(parent);
+        boolean list = list(parent);
+        boolean vector = vector(parent);
+        return _boolean || number || character || string || symbol || list || vector;
     }
 
-    private void datum(AstNode parent) throws Exception {
-        _boolean(parent);
-        number(parent);
-        character(parent);
-        string(parent);
-        symbol(parent);
-        list(parent);
-        vector(parent);
+    private boolean symbol(AstNode parent) {
+        return identifier(parent);
     }
 
-    private void symbol(AstNode parent) {
-        identifier(parent);
+    private boolean variable(AstNode parent) {
+        return identifier(parent);
     }
 
-    private void variable(AstNode parent) {
-        identifier(parent);
-    }
-
-    private void identifier(AstNode parent) {
+    private boolean identifier(AstNode parent) {
         boolean valid = false;
         if (initial() && subsequent()) {
             valid = true;
@@ -137,6 +235,7 @@ public class Parser {
             AstNode node = new IdentifierNode(tokenizer.nextToken());
             parent.addChild(node);
         }
+        return valid;
     }
 
     private boolean initial() {
@@ -155,7 +254,7 @@ public class Parser {
         }
     }
 
-    private void list(AstNode parent) throws Exception {
+    private boolean list(AstNode parent) throws Exception {
         if (tokenizer.peek().equals("(")) {
             tokenizer.discardNextToken();
             AstNode node = new ListNode();
@@ -167,11 +266,13 @@ public class Parser {
             } else {
                 tokenizer.discardNextToken();
                 parent.addChild(node);
+                return true;
             }
         }
+        return false;
     }
 
-    private void vector(AstNode parent) throws Exception {
+    private boolean vector(AstNode parent) throws Exception {
         if (tokenizer.peek().equals("#") && tokenizer.peek(1).equals("(")) {
             tokenizer.discardNextToken(2);
             AstNode node = new VectorNode();
@@ -183,54 +284,61 @@ public class Parser {
             } else {
                 tokenizer.discardNextToken();
                 parent.addChild(node);
+                return true;
             }
         }
+        return false;
     }
 
-    private void _boolean(AstNode parent) {
+    private boolean _boolean(AstNode parent) {
         if (tokenizer.peek().equalsIgnoreCase("#t")) {
             tokenizer.discardNextToken();
             AstNode node = new BooleanNode(true);
             parent.addChild(node);
+            return true;
         } else if (tokenizer.peek().equalsIgnoreCase("#f")) {
             tokenizer.discardNextToken();
             AstNode node = new BooleanNode(false);
             parent.addChild(node);
+            return true;
         }
+        return false;
     }
 
-    private void number(AstNode parent) {
-        num10(parent);
+    private boolean number(AstNode parent) {
+        return num10(parent);
     }
 
-    private void num10(AstNode parent) {
-        complex10(parent);
+    private boolean num10(AstNode parent) {
+        return complex10(parent);
     }
 
-    private void complex10(AstNode parent) {
-        real10(parent);
+    private boolean complex10(AstNode parent) {
+        return real10(parent);
     }
 
-    private void real10(AstNode parent) {
-        ureal10(parent);
+    private boolean real10(AstNode parent) {
+        return ureal10(parent);
     }
 
-    private void ureal10(AstNode parent) {
-        uinteger10(parent);
+    private boolean ureal10(AstNode parent) {
+        return uinteger10(parent);
     }
 
-    private void uinteger10(AstNode parent) {
-        digit10(parent);
+    private boolean uinteger10(AstNode parent) {
+        return digit10(parent);
     }
 
-    private void digit10(AstNode parent) {
+    private boolean digit10(AstNode parent) {
         if (tokenizer.peek().matches("[0-9]+")) {
             AstNode node = new IntegerNode(Integer.valueOf(tokenizer.nextToken()));
             parent.addChild(node);
+            return true;
         }
+        return false;
     }
 
-    private void character(AstNode parent) throws Exception {
+    private boolean character(AstNode parent) throws Exception {
         if (tokenizer.peek().startsWith("#\\")) {
             String tok = tokenizer.nextToken();
             AstNode node;
@@ -244,34 +352,45 @@ public class Parser {
                 throw new Exception("Invalid character sequence " + tok);
             }
             parent.addChild(node);
+            return true;
         }
+        return false;
     }
 
-    private void string(AstNode parent) throws Exception {
-        if (tokenizer.peek().startsWith("\"")) {
-            AstNode node = new StringNode(tokenizer.nextToken());
+    private boolean string(AstNode parent) throws Exception {
+        if (tokenizer.peek().startsWith("\"") && tokenizer.peek().endsWith("\"")) {
+            String token = tokenizer.nextToken();
+            token = token.substring(1, token.length() - 1); // remove start and end quotes
+            AstNode node = new StringNode(token);
             parent.addChild(node);
+            return true;
         }
+        return false;
     }
 
-
-
-    public void parse() {
+    private void parse() {
         try {
-            // todo: program not form should be root
-            astRoot = new FormNode();
-            expression(astRoot);
+            astRoot = new ProgramNode();
+            form(astRoot);
+
+            if (!tokenizer.endOfTokenStream()) {
+                throw new Exception("Unexpected token");
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }
+
         int i =0;
     }
 
+    public AstNode getAstRoot() {
+        return astRoot;
+    }
+
     public static void main(String[] args) {
-        String s = "(quote (1 2 3))";
+        String s = "\"a\\\\\\\"\"";
         try {
             Parser p = new Parser(s);
-            p.parse();
         } catch (Exception e) {
             e.printStackTrace();
         }
