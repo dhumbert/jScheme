@@ -4,7 +4,7 @@ import com.dhwebco.jScheme.Value;
 import com.dhwebco.jScheme.ast.AstNode;
 import com.dhwebco.jScheme.values.NilValue;
 
-public class LambdaNode extends AstNode {
+public class LambdaNode extends CallableNode {
     @Override
     public Value getValue() {
         return new NilValue();

@@ -48,6 +48,24 @@ public class ParserTest {
     }
 
     @Test
+    public void testInvalidEscapeSequenceInString() throws Exception {
+        boolean thrown = false;
+        try {
+            new Parser("\"lorem \\x ipsum\"");
+        } catch (Exception e) {
+            if (e.getMessage().contains("Invalid escape sequence in string")) {
+                thrown = true;
+            }
+        }
+
+        Assert.assertTrue(thrown);
+    }
+
+    public void testUnescapedQuoteInString() throws Exception {
+        new Parser("\"hello \"\"");
+    }
+
+    @Test
     public void testParseQuotedValue() throws Exception {
         Parser p = new Parser("(quote 45)");
         AstNode node = p.getAstRoot();
@@ -99,8 +117,9 @@ public class ParserTest {
         Parser p = new Parser("(lambda num (* num 13))");
         AstNode node = p.getAstRoot();
         Assert.assertTrue(node.getChild().getChild().getChild() instanceof LambdaNode);
-        Assert.assertTrue(node.getChild().getChild().getChild().getChild() instanceof IdentifierNode);
-        Assert.assertTrue(node.getChild().getChild().getChild().getChild().getValue().equals("num"));
+        Assert.assertTrue(node.getChild().getChild().getChild().getChild() instanceof ExpressionNode);
+        Assert.assertTrue(node.getChild().getChild().getChild().getChild().getChildren().size() == 1);
+        Assert.assertTrue(node.getChild().getChild().getChild().getChild().getChild().getValue().equals("num"));
         Assert.assertTrue(node.getChild().getChild().getChild().getChildren().get(1) instanceof ExpressionNode);
         Assert.assertTrue(node.getChild().getChild().getChild().getChildren().get(1).getChildren().size() == 3);
         Assert.assertTrue(node.getChild().getChild().getChild().getChildren().get(1).getChildren().get(0) instanceof ExpressionNode);

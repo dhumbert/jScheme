@@ -65,26 +65,6 @@ public class Tokenizer {
         }
     }
 
-    private boolean isValidStringChar(char c, char prevChar) {
-        if (c == '"' && !isEscapedStringChar(c, prevChar)) {
-            return false;
-        } else if (c == '\\' && !isEscapedStringChar(c, prevChar)) {
-            return false;
-        }
-
-        return true;
-    }
-
-    private boolean isEscapedStringChar(char c, char prevChar) {
-        if (c == '"' && prevChar == '\\') {
-            return true;
-        } else if (c == '\\' && prevChar == '\\') {
-            return true;
-        }
-
-        return false;
-    }
-
     private boolean isValidAtomChar(char c) {
         return !isWhitespace(c) && c != '(' && c != ')'
                 && c != '[' && c != ']' && c != '"' && c != '\'';

@@ -172,7 +172,14 @@ public class Parser {
                 return true;
             }
         } else {
-            return variable(parent);
+            AstNode node = new ExpressionNode();
+            boolean variable = variable(node);
+            if (variable) {
+                parent.addChild(node);
+                return true;
+            } else {
+                return false;
+            }
         }
     }
 
